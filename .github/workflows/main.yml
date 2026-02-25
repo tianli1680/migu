@@ -1,0 +1,160 @@
+name: update_migu
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+# 授予完整的写入权限
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  create-and-update-file:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 步骤1：检出仓库
+      - name: 1️⃣ 检出仓库代码
+        uses: actions/checkout@v4
+      
+      # 步骤2：下载、过滤并提取赛事频道
+      - name: 2️⃣ 下载并提取赛事频道
+        run: |
+          echo "开始下载播放列表内容..."
+          
+          # 创建临时文件存储原始内容
+          curl -L -f "https://tvv.tw/github.com/fafa002/yf2025/blob/main/yiyifafa.txt" > temp.txt
+          
+          echo "原始文件行数: $(wc -l < temp.txt) 行"
+          
+          # 提取频道名称包含"赛事"的行，并保留第一行的标题格式
+          echo "正在提取包含'赛事'的频道..."
+          
+          # 保留第一行标题（抖音K歌,#genre#）
+          head -n 1 temp.txt > yifa.txt
+          
+          # 添加一个空行（保持格式）
+          echo "" >> yifa.txt
+          
+          # 提取包含"赛事"的行，同时排除不良内容
+          grep -i "赛事" temp.txt | grep -v "盗源狗si全家 全家下地狱" >> yifa.txt || echo "未找到赛事频道"
+          
+          # 检查提取结果
+          SPORTS_COUNT=$(grep -c "赛事" yifa.txt 2>/dev/null || echo "0")
+          
+          if [ "$SPORTS_COUNT" -gt 0 ]; then
+            echo "✅ 找到 $SPORTS_COUNT 个赛事频道"
+          else
+            echo "⚠️ 未找到任何赛事频道，文件将只包含标题行"
+          fi
+          
+          # 清理临时文件
+          rm temp.txt
+          
+          # 验证文件是否成功创建
+          if [ -f "yifa.txt" ]; then
+            echo "✅ 文件 yifa.txt 已成功创建"
+            echo "文件总行数: $(wc -l < yifa.txt) 行"
+            echo -e "\n📄 提取的赛事频道内容:"
+            echo "----------------------------------------"
+            cat yifa.txt
+            echo "----------------------------------------"
+          else
+            echo "❌ 文件创建失败"
+            exit 1
+          fi
+      
+      # 步骤3：验证提取结果
+      - name: 3️⃣ 验证提取结果
+        run: |
+          # 检查是否只包含赛事频道（除了标题行）
+          NON_SPORTS_LINES=$(grep -v "赛事" yifa.txt | grep -v "抖音K歌,#genre#" | grep -v "^$" | wc -l)
+          
+          if [ "$NON_SPORTS_LINES" -gt 0 ]; then
+            echo "⚠️ 警告：发现非赛事频道行："
+            grep -v "赛事" yifa.txt | grep -v "抖音K歌,#genre#" | grep -v "^$"
+          else
+            echo "✅ 验证通过：只包含赛事频道（和标题行）"
+          fi
+          
+          # 验证不良内容已被删除
+          if grep -q "盗源狗si全家 全家下地狱" yifa.txt; then
+            echo "❌ 错误：不良内容仍然存在于文件中"
+            exit 1
+          else
+            echo "✅ 不良内容检查通过"
+          fi
+      
+      # 步骤4：推送文件到仓库
+      - name: 4️⃣ 推送文件到仓库
+        run: |
+          # 配置git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 显示当前状态
+          echo "当前目录内容:"
+          ls -la
+          
+          # 确保yifa.txt存在
+          if [ ! -f "yifa.txt" ]; then
+            echo "❌ 错误: yifa.txt 不存在"
+            exit 1
+          fi
+          
+          # 添加文件到git
+          git add yifa.txt -f
+          
+          # 检查是否有变化需要提交
+          if git diff --staged --quiet; then
+            echo "文件内容没有变化，跳过提交"
+          else
+            # 获取赛事频道数量用于提交信息
+            SPORTS_COUNT=$(grep -c "赛事" yifa.txt 2>/dev/null || echo "0")
+            
+            # 提交更改
+            git commit -m "更新赛事频道列表 - 找到 $SPORTS_COUNT 个频道 - $(date +'%Y-%m-%d %H:%M:%S')"
+            
+            # 获取当前分支名
+            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+            echo "当前分支: $BRANCH_NAME"
+            
+            # 拉取最新更改并推送
+            git pull origin $BRANCH_NAME --rebase
+            git push origin $BRANCH_NAME
+            
+            echo "✅ 文件已成功推送到仓库！"
+          fi
+      
+      # 步骤5：最终验证和统计
+      - name: 5️⃣ 最终验证和统计
+        run: |
+          echo "等待几秒钟让文件同步..."
+          sleep 5
+          
+          if [ -f "yifa.txt" ]; then
+            echo "✅ 文件存在于工作目录"
+            
+            # 统计信息
+            TOTAL_LINES=$(wc -l < yifa.txt)
+            SPORTS_COUNT=$(grep -c "赛事" yifa.txt 2>/dev/null || echo "0")
+            
+            echo "📊 文件统计信息:"
+            echo "   - 总行数: $TOTAL_LINES"
+            echo "   - 赛事频道数: $SPORTS_COUNT"
+            echo "   - 文件大小: $(wc -c < yifa.txt) 字节"
+            
+            echo -e "\n📄 最终文件内容:"
+            echo "----------------------------------------"
+            cat yifa.txt
+            echo "----------------------------------------"
+            
+            if [ "$SPORTS_COUNT" -eq 0 ]; then
+              echo "⚠️ 注意：当前没有找到任何赛事频道"
+            fi
+          else
+            echo "❌ 错误: 找不到 yifa.txt"
+            exit 1
+          fi
