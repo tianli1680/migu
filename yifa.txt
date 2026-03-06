@@ -63,3 +63,4 @@ CCTV5+体育赛事,http://8.148.86.54:3300/641886773
 赛事咪咕播32,http://cdn6.bkpcp.top/itv/yditv.php?Contentid=3000000020000011521
 赛事咪咕播4k,http://cdn6.bkpcp.top/itv/yditv.php?Contentid=3000000010000005180
 赛事至臻视界,http://cdn6.bkpcp.top/itv/yditv.php?Contentid=3000000010000015686
+哒啵赛事,http://111.56.90.5/000000000000/1000000001000003775/index.m3u8
